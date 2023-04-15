@@ -89,9 +89,15 @@ static int do_remount(int flags = 0, int exclude_flags = 0) {
     collect_mounts();
     struct statvfs stvfs{};
     exclude_flags |= MS_BIND;
-    for (auto &info : mountpoint) {
+    for (auto &mnt : mountinfo) {
+        auto info = mnt.target;
         statvfs(info.data(), &stvfs);
-        xmount(nullptr, info.data(), nullptr, MS_REMOUNT | (stvfs.f_flag & ~exclude_flags) | flags, nullptr);
+        if (mnt.type == "ext4" || mnt.type == "f2fs" || mnt.type == "overlay" || mnt.type == "tmpfs") {
+            int ret = mount(nullptr, info.data(), nullptr, MS_REMOUNT | (stvfs.f_flag & ~exclude_flags) | flags, nullptr);
+            LOGD("%s [%s] (%s)\n", (ret == 0)? "remounted" : "remount failed", info.data(), mnt.type.data());
+        } else {
+            LOGD("%s [%s] (%s)\n", "skipped", info.data(), mnt.type.data());
+        }
     }
     return 0;
 }
