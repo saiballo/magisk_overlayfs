@@ -180,7 +180,7 @@ int main(int argc, const char **argv) {
     std::vector<string> mount_list;
 
     tmp_dir = std::string("/mnt/") + "overlayfs_" + random_strc(20);
-    if (mkdir(tmp_dir.data(), 750) != 0) {
+    if (mkdirs(tmp_dir.data(), 750) != 0) {
         LOGE("Cannot create temp folder, please make sure /mnt is clean and write-able!\n");
         return -1;
     }
