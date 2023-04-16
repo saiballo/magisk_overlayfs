@@ -57,13 +57,12 @@ unzip -oj "$ZIPFILE" post-fs-data.sh \
                      uninstall.sh \
                      module.prop \
                      "libs/$ABI/overlayfs_system" \
-                     "libs/$ABI/busybox" \
                      -d "$MODPATH"
 unzip -oj "$ZIPFILE" util_functions.sh  -d "/data/adb/modules/${MODPATH##*/}"
 
 ui_print "- Setup module"
 
-chmod 777 "$MODPATH/overlayfs_system" "$MODPATH/busybox"
+chmod 777 "$MODPATH/overlayfs_system"
 
 resize_img() {
     e2fsck -pf "$1" || return 1

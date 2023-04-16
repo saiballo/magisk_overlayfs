@@ -28,5 +28,5 @@ rm -rf out
 mkdir -p out
 cp -af magisk-module out
 cp -af README.md out/magisk-module
-cp -af native/libs/* out/magisk-module/libs
+cp -af native/libs out/magisk-module
 zip -r9 out/magisk-module-release.zip out/magisk-module
