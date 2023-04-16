@@ -13,7 +13,19 @@ using namespace std;
 #define MAKEDIR(s) \
     if (std::find(mountpoint.begin(), mountpoint.end(), "/" s) != mountpoint.end()) { \
         mkdir(std::string(tmp_dir + "/" s).data(), 0755); \
-        mount_list.push_back("/" s); \
+        if ((dirfp = opendir("/" s)) != nullptr) { \
+            char buf[4098]; \
+            struct stat st; \
+            while ((dp = readdir(dirfp)) != nullptr) { \
+                snprintf(buf, sizeof(buf) - 1, "/" s "/%s", dp->d_name); \
+                if (strcmp(dp->d_name, ".") == 0 || strcmp(dp->d_name, "..") == 0 || \
+                lstat(buf, &st) != 0 || !S_ISDIR(st.st_mode)) \
+                    continue; \
+                mkdir(std::string(tmp_dir + buf).data(), 0755); \
+                mount_list.push_back(buf); \
+            } \
+            closedir(dirfp); \
+        } \
     }
 
 #define CLEANUP \
@@ -190,6 +202,8 @@ int main(int argc, const char **argv) {
         mountinfo.emplace_back(system);
         mountpoint.emplace_back("/system");
     }
+    DIR *dirfp;
+    struct dirent *dp;
 
     MAKEDIR("system")
     MAKEDIR("vendor")
@@ -261,21 +275,23 @@ int main(int argc, const char **argv) {
             free(s);
         };
         
-        if (mkdir(upperdir.data(), 0755) == 0 && getfilecon(info.data(), &con) >= 0) {
-            LOGD("clone attr [%s] from [%s]\n", con, info.data());
-            chown(upperdir.data(), getuidof(info.data()), getgidof(info.data()));
-            chmod(upperdir.data(), getmod(info.data()));
-            setfilecon(upperdir.data(), con);
-            freecon(con);
-        }
-        mkdirs(workerdir.data(), 0755);
-        if (!is_dir(upperdir.data()) ||
-            !is_dir(workerdir.data())) {
-            LOGD("setup upperdir or workdir failed!\n");
-            CLEANUP
-            return 1;
-        }
+        {
+            if (mkdir(upperdir.data(), 0755) == 0 && getfilecon(info.data(), &con) >= 0) {
+                LOGD("clone attr [%s] from [%s]\n", con, info.data());
+                chown(upperdir.data(), getuidof(info.data()), getgidof(info.data()));
+                chmod(upperdir.data(), getmod(info.data()));
+                setfilecon(upperdir.data(), con);
+                freecon(con);
+            }
+            mkdirs(workerdir.data(), 0755);
 
+            if (!is_dir(upperdir.data()) ||
+                !is_dir(workerdir.data())) {
+                LOGD("setup upperdir or workdir failed!\n");
+                CLEANUP
+                return 1;
+            }
+        }
         {
             bool module_node_is_dir = is_dir(masterdir.data());
             std::string opts;
@@ -356,22 +372,23 @@ int main(int argc, const char **argv) {
                 }
                 free(s);
             };
-
-            if (mkdir(upperdir.data(), 0755) == 0 && getfilecon(info.data(), &con) >= 0) {
-                LOGD("clone attr [%s] from [%s]\n", con, info.data());
-                chown(upperdir.data(), getuidof(info.data()), getgidof(info.data()));
-                chmod(upperdir.data(), getmod(info.data()));
-                setfilecon(upperdir.data(), con);
-                freecon(con);
-            }
-            mkdirs(workerdir.data(), 0755);
-            if (!is_dir(upperdir.data()) ||
-                !is_dir(workerdir.data())) {
-                LOGD("setup upperdir or workdir failed!\n");
-                CLEANUP
-                return 1;
-            }
+            {
+                if (mkdir(upperdir.data(), 0755) == 0 && getfilecon(info.data(), &con) >= 0) {
+                    LOGD("clone attr [%s] from [%s]\n", con, info.data());
+                    chown(upperdir.data(), getuidof(info.data()), getgidof(info.data()));
+                    chmod(upperdir.data(), getmod(info.data()));
+                    setfilecon(upperdir.data(), con);
+                    freecon(con);
+                }
+                mkdirs(workerdir.data(), 0755);
     
+                if (!is_dir(upperdir.data()) ||
+                    !is_dir(workerdir.data())) {
+                    LOGD("setup upperdir or workdir failed!\n");
+                    CLEANUP
+                    return 1;
+                }
+            }
             {
                 std::string opts;
                 opts += "lowerdir=";

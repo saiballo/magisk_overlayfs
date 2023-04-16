@@ -44,6 +44,8 @@ export OVERLAY_MODE=2
 
 ## Modify system files with OverlayFS
 
+- Limitations: you can only modify content in subdirectories of partitions because covering entire partitions with `overlayfs` can result in devices unable to boot.
+- For most people, it should be enough to modify subdirectories of partitions (`/system/app`, `/system/etc`, ...)
 - If you are lazy to remount, please modify `mode.sh` and set it to `OVERLAY_MODE=1` so overlayfs will be always read-write every boot.
 
 - You can quickly remount all overlayfs to read-write by this command in terminal:
