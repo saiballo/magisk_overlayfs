@@ -102,6 +102,16 @@ static int do_remount(int flags = 0, int exclude_flags = 0) {
     return 0;
 }
 
+static std::string get_lowerdirs(std::vector<std::string> list, const char *sub) {
+    std::string lowerdir = "";
+    for (auto it = list.begin(); it != list.end(); it++) {
+   	    auto dir = *it + sub;
+   	    if (is_dir(dir.data()))
+   	        lowerdir+= dir + ":";
+    }
+    return lowerdir;
+}
+
 int main(int argc, const char **argv) {
     char *argv0 = strdup(argv[0]);
     const char *bname = basename(argv0);
@@ -192,8 +202,9 @@ int main(int argc, const char **argv) {
     }
     mkdir(std::string(std::string(argv[1]) + "/upper").data(), 0750);
     mkdir(std::string(std::string(argv[1]) + "/worker").data(), 0750);
-    mkdir(std::string(std::string(argv[1]) + "/master").data(), 0750);
+
     xmount("tmpfs", tmp_dir.data(), "tmpfs", 0, nullptr);
+    mkdir(std::string(tmp_dir + "/master").data(), 0750);
 
     struct mount_info system;
     system.target = "/system";
@@ -231,7 +242,7 @@ int main(int argc, const char **argv) {
     mountpoint.clear();
 
     {
-        std::string masterdir = std::string(argv[1]) + "/master";
+        std::string masterdir = tmp_dir + "/master";
         if (!str_empty(OVERLAYLIST_env)) {
             if (strchr(OVERLAYLIST_env, ':') != nullptr) {
                 std::string opts = "lowerdir=";
@@ -242,6 +253,7 @@ int main(int argc, const char **argv) {
             }
         }
     }
+    auto module_list = split_ro(OVERLAYLIST_env, ':');
 
     LOGI("** Prepare mounts\n");
     // mount overlayfs for subdirectories of /system /vendor /product /system_ext
@@ -254,7 +266,7 @@ int main(int argc, const char **argv) {
 
         std::string upperdir = std::string(argv[1]) + "/upper" + info;
         std::string workerdir = std::string(argv[1]) + "/worker" + info;
-        std::string masterdir = std::string(argv[1]) + "/master" + info;
+        std::string masterdir = tmp_dir + "/master" + info;
         char *con;
         {
             char *s = strdup(info.data());
@@ -293,11 +305,9 @@ int main(int argc, const char **argv) {
             }
         }
         {
-            bool module_node_is_dir = is_dir(masterdir.data());
             std::string opts;
             opts += "lowerdir=";
-            if (module_node_is_dir)
-                opts += masterdir + ":";
+            opts += get_lowerdirs(module_list, info.data());
             opts += info.data();
             opts += ",upperdir=";
             opts += upperdir;
@@ -312,8 +322,7 @@ int main(int argc, const char **argv) {
                 opts = "lowerdir=";
                 opts += upperdir;
                 opts += ":";
-                if (module_node_is_dir)
-                    opts += masterdir + ":";
+                opts += get_lowerdirs(module_list, info.data());
                 opts += info.data();
                 if (xmount("overlay", tmp_mount.data(), "overlay", 0, opts.data())) {
                     LOGW("Unable to add [%s], ignore!\n", info.data());
@@ -332,13 +341,13 @@ int main(int argc, const char **argv) {
         std::string tmp_mount = tmp_dir + info;
         std::string upperdir = std::string(argv[1]) + "/upper" + info;
         std::string workerdir = std::string(argv[1]) + "/worker" + info;
-        std::string masterdir = std::string(argv[1]) + "/master" + info;
+        std::string masterdir = tmp_dir + "/master" + info;
         bool module_node_is_dir = is_dir(masterdir.data());
         bool module_node_exist = fexist(masterdir.data());
         bool upper_node_is_dir = is_dir(upperdir.data());
         bool upper_node_exist = fexist(upperdir.data());
         struct stat st;
-        if (lstat(info.data(), &st) != 0 || // target does not exist, it could be deleted by modules
+        if (lstat(tmp_mount.data(), &st) != 0 || // target does not exist, it could be deleted by modules
             (((upper_node_exist && !upper_node_is_dir) ||
               (!upper_node_exist && module_node_exist && !module_node_is_dir)) && S_ISDIR(st.st_mode))) // module add file but original is folder
             continue;
@@ -392,8 +401,7 @@ int main(int argc, const char **argv) {
             {
                 std::string opts;
                 opts += "lowerdir=";
-                if (stat(masterdir.data(), &st) == 0 && S_ISDIR(st.st_mode))
-                    opts += masterdir + ":";
+                opts += get_lowerdirs(module_list, info.data());
                 opts += info.data();
                 opts += ",upperdir=";
                 opts += upperdir;
@@ -408,8 +416,7 @@ int main(int argc, const char **argv) {
                     opts = "lowerdir=";
                     opts += upperdir;
                     opts += ":";
-                    if (stat(masterdir.data(), &st) == 0 && S_ISDIR(st.st_mode))
-                        opts += masterdir + ":";
+                    opts += get_lowerdirs(module_list, info.data());
                     opts += info.data();
                     if (xmount("overlay", tmp_mount.data(), "overlay", 0, opts.data())) {
                         // for some reason, overlayfs does not support some filesystems such as vfat, tmpfs, f2fs
