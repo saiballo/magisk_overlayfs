@@ -13,19 +13,7 @@ using namespace std;
 #define MAKEDIR(s) \
     if (std::find(mountpoint.begin(), mountpoint.end(), "/" s) != mountpoint.end()) { \
         mkdir(std::string(tmp_dir + "/" s).data(), 0755); \
-        if ((dirfp = opendir("/" s)) != nullptr) { \
-            char buf[4098]; \
-            struct stat st; \
-            while ((dp = readdir(dirfp)) != nullptr) { \
-                snprintf(buf, sizeof(buf) - 1, "/" s "/%s", dp->d_name); \
-                if (strcmp(dp->d_name, ".") == 0 || strcmp(dp->d_name, "..") == 0 || \
-                lstat(buf, &st) != 0 || !S_ISDIR(st.st_mode)) \
-                    continue; \
-                mkdir(std::string(tmp_dir + buf).data(), 0755); \
-                mount_list.push_back(buf); \
-            } \
-            closedir(dirfp); \
-        } \
+        mount_list.push_back("/" s); \
     }
 
 #define CLEANUP \
@@ -213,8 +201,6 @@ int main(int argc, const char **argv) {
         mountinfo.emplace_back(system);
         mountpoint.emplace_back("/system");
     }
-    DIR *dirfp;
-    struct dirent *dp;
 
     MAKEDIR("system")
     MAKEDIR("vendor")
