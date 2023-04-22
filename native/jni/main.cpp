@@ -93,9 +93,9 @@ static int do_remount(int flags = 0, int exclude_flags = 0) {
 static std::string get_lowerdirs(std::vector<std::string> list, const char *sub) {
     std::string lowerdir = "";
     for (auto it = list.begin(); it != list.end(); it++) {
-   	    auto dir = *it + sub;
-   	    if (is_dir(dir.data()))
-   	        lowerdir+= dir + ":";
+           auto dir = *it + sub;
+           if (is_dir(dir.data()))
+               lowerdir+= dir + ":";
     }
     return lowerdir;
 }
@@ -428,34 +428,62 @@ int main(int argc, const char **argv) {
         }
     }
 
+    mountpoint.clear();
 
     LOGI("** Loading overlayfs\n");
     std::vector<string> mounted;
-    for (auto &info : mountpoint) {
+    for (auto &info : mount_list) {
         std::string tmp_mount = overlay_tmpdir + info;
-        if (xmount(tmp_mount.data(), info.data(), nullptr, MS_BIND, nullptr) ||
-            mount("", info.data(), nullptr, MS_PRIVATE, nullptr) ||
-            mount("", info.data(), nullptr, MS_SHARED, nullptr)) {
-            LOGE("mount failed, abort!\n");
+        if (xmount(tmp_mount.data(), info.data(), nullptr, MS_BIND | MS_REC, nullptr) ||
+            mount("", info.data(), nullptr, MS_PRIVATE | MS_REC, nullptr) ||
+            mount("", info.data(), nullptr, MS_SHARED | MS_REC, nullptr)) {
+            LOGE("mount failed, fall to mount subtree\n");
             // revert all mounts
             std::reverse(mounted.begin(), mounted.end());
             for (auto &dir : mounted) {
                 umount2(dir.data(), MNT_DETACH);
             }
-            CLEANUP
-            return 1;
+            mounted.clear();
+            goto subtree_mounts; // fall back to mount subtree
         }
         mounted.emplace_back(info);
     }
-    // inject mount back to to magisk mirrors so Magic mount won't override it
+    goto inject_mirrors;
+
+    subtree_mounts:
+    for (auto &info : mount_list) {
+        DIR *dirfp;
+        struct dirent *dp;
+        char buf[4098];
+        struct stat st;
+        std::string tmp_mount = overlay_tmpdir + info;
+        if ((dirfp = opendir(tmp_mount.data())) != nullptr) {
+            while ((dp = readdir(dirfp)) != nullptr) {
+                snprintf(buf, sizeof(buf) - 1, "%s/%s", tmp_mount.data(), dp->d_name);
+                if (strcmp(dp->d_name, ".") == 0 || strcmp(dp->d_name, "..") == 0 ||
+                lstat(buf, &st) != 0 || !S_ISDIR(st.st_mode))
+                    continue;
+                if (xmount(buf, buf + strlen(overlay_tmpdir.data()), nullptr, MS_BIND | MS_REC, nullptr) ||
+                    mount("", buf + strlen(overlay_tmpdir.data()), nullptr, MS_PRIVATE | MS_REC, nullptr) ||
+                    mount("", buf + strlen(overlay_tmpdir.data()), nullptr, MS_SHARED | MS_REC, nullptr)) {
+                    LOGE("mount failed, skip!\n");
+                    continue;
+                }
+                mounted.emplace_back(buf + strlen(overlay_tmpdir.data()));
+            }
+            closedir(dirfp);
+        }
+    }
+
+    inject_mirrors: // inject mount back to to magisk mirrors so Magic mount won't override it
     if (mirrors != nullptr) {
         LOGI("** Loading overlayfs mirrors\n");
-        for (auto &info : mountpoint) {
+        for (auto &info : mounted) {
             std::string mirror_dir = string(mirrors) + info;
             if (access(mirror_dir.data(), F_OK) == 0) {
-                xmount(info.data(), mirror_dir.data(), nullptr, MS_BIND, nullptr);
-                mount("", mirror_dir.data(), nullptr, MS_PRIVATE, nullptr);
-                mount("", mirror_dir.data(), nullptr, MS_SHARED, nullptr);
+                xmount(info.data(), mirror_dir.data(), nullptr, MS_BIND | MS_REC, nullptr);
+                mount("", mirror_dir.data(), nullptr, MS_PRIVATE | MS_REC, nullptr);
+                mount("", mirror_dir.data(), nullptr, MS_SHARED | MS_REC, nullptr);
             }
         }
     }
