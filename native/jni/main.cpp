@@ -12,17 +12,17 @@ using namespace std;
 
 #define MAKEDIR(s) \
     if (std::find(mountpoint.begin(), mountpoint.end(), "/" s) != mountpoint.end()) { \
-        mkdir(std::string(tmp_dir + "/" s).data(), 0755); \
+        mkdir(std::string(overlay_tmpdir + "/" s).data(), 0755); \
         mount_list.push_back("/" s); \
     }
 
 #define CLEANUP \
     LOGI("clean up\n"); \
-    umount2(tmp_dir.data(), MNT_DETACH); \
-    rmdir(tmp_dir.data());
+    umount2(overlay_tmpdir.data(), MNT_DETACH); \
+    rmdir(overlay_tmpdir.data());
 
 int log_fd = -1;
-std::string tmp_dir;
+std::string overlay_tmpdir;
 std::vector<string> mountpoint;
 std::vector<mount_info> mountinfo;
 
@@ -183,16 +183,16 @@ int main(int argc, const char **argv) {
     // list of directories should be mounted!
     std::vector<string> mount_list;
 
-    tmp_dir = std::string("/mnt/") + "overlayfs_" + random_strc(20);
-    if (mkdirs(tmp_dir.data(), 750) != 0) {
+    overlay_tmpdir = std::string("/mnt/") + "overlayfs_" + random_strc(20);
+    if (mkdirs(overlay_tmpdir.data(), 750) != 0) {
         LOGE("Cannot create temp folder, please make sure /mnt is clean and write-able!\n");
         return -1;
     }
     mkdir(std::string(std::string(argv[1]) + "/upper").data(), 0750);
     mkdir(std::string(std::string(argv[1]) + "/worker").data(), 0750);
 
-    xmount("tmpfs", tmp_dir.data(), "tmpfs", 0, nullptr);
-    mkdir(std::string(tmp_dir + "/master").data(), 0750);
+    xmount("tmpfs", overlay_tmpdir.data(), "tmpfs", 0, nullptr);
+    mkdir(std::string(overlay_tmpdir + "/master").data(), 0750);
 
     struct mount_info system;
     system.target = "/system";
@@ -228,7 +228,7 @@ int main(int argc, const char **argv) {
     mountpoint.clear();
 
     {
-        std::string masterdir = tmp_dir + "/master";
+        std::string masterdir = overlay_tmpdir + "/master";
         if (!str_empty(OVERLAYLIST_env)) {
             if (strchr(OVERLAYLIST_env, ':') != nullptr) {
                 std::string opts = "lowerdir=";
@@ -248,11 +248,11 @@ int main(int argc, const char **argv) {
         struct stat st;
         if (stat(info.data(), &st))
             continue;
-        std::string tmp_mount = tmp_dir + info;
+        std::string tmp_mount = overlay_tmpdir + info;
 
         std::string upperdir = std::string(argv[1]) + "/upper" + info;
         std::string workerdir = std::string(argv[1]) + "/worker" + info;
-        std::string masterdir = tmp_dir + "/master" + info;
+        std::string masterdir = overlay_tmpdir + "/master" + info;
         char *con;
         {
             char *s = strdup(info.data());
@@ -324,10 +324,10 @@ int main(int argc, const char **argv) {
     // if stock mount is file, then we bind mount it back
     for (auto &mnt : mountinfo) {
         auto info = mnt.target;
-        std::string tmp_mount = tmp_dir + info;
+        std::string tmp_mount = overlay_tmpdir + info;
         std::string upperdir = std::string(argv[1]) + "/upper" + info;
         std::string workerdir = std::string(argv[1]) + "/worker" + info;
-        std::string masterdir = tmp_dir + "/master" + info;
+        std::string masterdir = overlay_tmpdir + "/master" + info;
         bool module_node_is_dir = is_dir(masterdir.data());
         bool module_node_exist = fexist(masterdir.data());
         bool upper_node_is_dir = is_dir(upperdir.data());
@@ -432,7 +432,7 @@ int main(int argc, const char **argv) {
     LOGI("** Loading overlayfs\n");
     std::vector<string> mounted;
     for (auto &info : mountpoint) {
-        std::string tmp_mount = tmp_dir + info;
+        std::string tmp_mount = overlay_tmpdir + info;
         if (xmount(tmp_mount.data(), info.data(), nullptr, MS_BIND, nullptr) ||
             mount("", info.data(), nullptr, MS_PRIVATE, nullptr) ||
             mount("", info.data(), nullptr, MS_SHARED, nullptr)) {
