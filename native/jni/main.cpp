@@ -55,7 +55,9 @@ static void collect_mounts() {
                  UNDER("/my_carrier") ||
                  UNDER("/my_region") ||
                  UNDER("/my_company") ||
-                 UNDER("/my_bigball")) {
+                 UNDER("/my_bigball") ||
+                 UNDER("/prism") ||
+                 UNDER("/optics")) {
                 for (auto &s : mountpoint) {
                     //   /a/b/c <--- under a (skip)
                     //   /a
@@ -224,6 +226,8 @@ int main(int argc, const char **argv) {
     MAKEDIR("my_region")
     MAKEDIR("my_company")
     MAKEDIR("my_bigball")
+    MAKEDIR("prism")
+    MAKEDIR("optics")
 
     mountpoint.clear();
 
